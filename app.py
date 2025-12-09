@@ -66,7 +66,8 @@ def generate_video():
         logger.info("Processing image and adding text overlay...")
         img = Image.open(bg_path)
         img = img.resize((1280, 720))  # 720p instead of 1080p to reduce memory/processing
-        draw = ImageDraw.Draw(img)ontent)
+        draw = ImageDraw.Draw(img)
+        
         # Try to load font, fallback to default
         try:
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 50)
