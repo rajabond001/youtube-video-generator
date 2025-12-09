@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 PEXELS_API_KEY = os.environ.get('PEXELS_API_KEY', "1QxhdvjnytoRlGeKmMJHwYeBIBVvcFV5c9iuWrw0fqKlGMCNGq6r3q1d")
 
 @app.route('/')
+def home():
+    return jsonify({
+        "status": "online",
+        "service": "YouTube Video Generator API",
+        "endpoints": ["/generate"]
+    })
+
 @app.route('/generate', methods=['POST'])
 def generate_video():
     temp_dir = None
@@ -33,9 +40,7 @@ def generate_video():
         # Create temporary directory
         temp_dir = tempfile.mkdtemp()
         logger.info(f"Temp directory created: {temp_dir}")
-    try:
-        data = request.json
-        quote = data.get('quote', 'No quote provided')
+        
         # 1. Fetch random background image from Pexels
         logger.info("Fetching background image from Pexels...")
         page = random.randint(1, 100)
@@ -61,7 +66,7 @@ def generate_video():
         with open(bg_path, 'wb') as f:
             f.write(img_response.content)
         logger.info("Background image downloaded")
-        # Download image
+        
         # 2. Add text overlay
         logger.info("Processing image and adding text overlay...")
         img = Image.open(bg_path)
@@ -78,13 +83,7 @@ def generate_video():
             author_font = ImageFont.load_default()
         
         # Wrap text
-        max_width = 1100= ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 50)
-        except:
-            font = ImageFont.load_default()
-            author_font = ImageFont.load_default()
-        
-        # Wrap text
-        max_width = 1600
+        max_width = 1100
         lines = []
         words = quote.split()
         current_line = ""
@@ -92,16 +91,18 @@ def generate_video():
         for word in words:
             test_line = current_line + word + " "
             bbox = draw.textbbox((0, 0), test_line, font=font)
-        # Calculate position
-        line_height = 65
-        total_height = len(lines) * line_height + 80
-        y = (720 - total_height) / 2line)
+            if bbox[2] - bbox[0] <= max_width:
+                current_line = test_line
+            else:
+                lines.append(current_line)
                 current_line = word + " "
         lines.append(current_line)
         
         # Calculate position
-        line_height = 90
-        total_height = len(lines) * line_height + 100
+        line_height = 65
+        total_height = len(lines) * line_height + 80
+        y = (720 - total_height) / 2
+        
         # Draw text with shadow
         for line in lines:
             bbox = draw.textbbox((0, 0), line, font=font)
@@ -119,7 +120,7 @@ def generate_video():
         author_x = (1280 - (bbox[2] - bbox[0])) / 2
         draw.text((author_x+2, y+17), author_text, font=author_font, fill='black')
         draw.text((author_x, y+15), author_text, font=author_font, fill='white')
-        draw.text((author_x+2, y+22), author_text, font=author_font, fill='black')
+        
         # Save image
         quote_img_path = os.path.join(temp_dir, 'quote_image.jpg')
         img.save(quote_img_path, quality=85)
@@ -130,6 +131,9 @@ def generate_video():
         full_text = f"{quote}. By {author}"
         tts = gTTS(text=full_text, lang='en', slow=False)
         audio_path = os.path.join(temp_dir, 'audio.mp3')
+        tts.save(audio_path)
+        logger.info("Audio generated")
+        
         # 4. Create video with FFmpeg
         logger.info("Creating video with FFmpeg...")
         output_path = os.path.join(temp_dir, 'output.mp4')
@@ -151,6 +155,14 @@ def generate_video():
             '-loglevel', 'error',
             output_path
         ]
+        
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, timeout=20)
+        if result.returncode != 0:
+            logger.error(f"FFmpeg error: {result.stderr}")
+            return jsonify({"error": f"FFmpeg failed: {result.stderr}"}), 500
+        
+        logger.info("Video created successfully")
+        
         # 5. Read video file and return
         logger.info("Reading video file...")
         if not os.path.exists(output_path):
@@ -187,20 +199,8 @@ def generate_video():
                 logger.info("Temp files cleaned up")
             except Exception as e:
                 logger.warning(f"Failed to clean up temp dir: {e}")
-        
-        # Return video as binary in response
-        from flask import send_file
-        import io
-        return send_file(
-            io.BytesIO(video_data),
-            mimetype='video/mp4',
-            as_attachment=True,
-            download_name=f'quote_video.mp4'
-        )
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
+
